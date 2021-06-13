@@ -1,8 +1,9 @@
 // 3DFileTest.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
 
 #include "pch.h"
+#include "Common/Globals.hpp"
 #include "Common/Redguard3dFile.h"
+#include "Common/RedguardRobFile.h"
 #include "Common/RedguardTexBsiFile.h"
 #include "Common/RedguardFbx.h"
 
@@ -10,25 +11,24 @@
 
 #include "il/il.h"
 #include "il/ilu.h"
+#include <algorithm>
+
+
+#ifdef IOS_REF
+	#undef  IOS_REF
+	#define IOS_REF (*(pManager->GetIOSettings()))
+#endif
 
 
 using std::string;
 using std::vector;
 using namespace uesp;
+using namespace constants;
 
 
-const string REDGUARD_FILE_PATH = "D:\\Redguard\\Redguard\\fxart\\";
-//const string REDGUARD_FILE_PATH = "D:\\EGD\\uesp\\Redguard\\3dart\\";
+//TODO: move all these (and the parse logic) to the respective classes
 
-const dword REDGUARD_HEADER_SIZE = 64;
-
-const string OUTPUT_FBX_PATH = "c:\\Temp\\fbx3\\";
-const string OUTPUT_TEXTURE_PATH = "c:\\Temp\\texture\\";
-
-const string REDGUARD_WORLD_FILE1 = "D:\\Redguard\\Redguard\\maps\\ISLAND.WLD";
-const string REDGUARD_WORLD_FILE2 = "D:\\Redguard\\Redguard\\maps\\HIDEOUT.WLD";
-const string REDGUARD_WORLD_FILE3 = "D:\\Redguard\\Redguard\\maps\\EXTPALAC.WLD";
-const string REDGUARD_WORLD_FILE4 = "D:\\Redguard\\Redguard\\maps\\NECRISLE.WLD";
+const unsigned __int32 REDGUARD_HEADER_SIZE = 64;
 
 
 struct rg3d_header_t 
@@ -62,15 +62,42 @@ struct rg3d_file_t
 	CRedguard3dFile File;
 };
 
-std::vector<rg3d_file_t> g_FileInfos;
+std::vector<rg3d_file_t> g_3dFileInfos;
+
+
+struct rgrob_file_t
+{
+	string FullName;
+	string Name;
+	dword Size;
+	rg_robfile_header_t Header;
+
+	CRedguardRobFile File;
+};
+
+std::vector<rgrob_file_t> g_robFileInfos;
+
+
+static const char* gDiffuseElementName = "DiffuseUV";
+static const char* gAmbientElementName = "AmbientUV";
+static const char* gEmissiveElementName = "EmissiveUV";
+
+const size_t REDGUARD_WORLD_HEADERSIZE = 1184;
+const size_t REDGUARD_WORLD_IMAGEHEADERSIZE = 22;
+const size_t REDGUARD_WORLD_FOOTERSIZE = 16;
+const size_t REDGUARD_WORLD_EXPORTWIDTH = 128;
+const size_t REDGUARD_WORLD_EXPORTHEIGHT = 128;
+
+typedef std::vector<byte> simpleimagedata_t;
+typedef std::vector< simpleimagedata_t > imagedatas_t;
 
 
 
-bool Parse3DFile(const string Filename)
+static bool Parse3DFile(const string Filename, const string TargetPath)
 {
 	rg3d_file_t FileInfo;
 	FILE* pFile;
-	PrintLog("\tParsing file %s...", Filename.c_str());
+	//PrintLog("Parsing file %s...", Filename.c_str());
 
 	pFile = fopen(Filename.c_str(), "rb");
 	if (pFile == nullptr) return ReportError("Error: Failed to open file '%s' for reading!", Filename.c_str());
@@ -95,18 +122,22 @@ bool Parse3DFile(const string Filename)
 
 	std::string FbxFilename;
 
-	FbxFilename = OUTPUT_FBX_PATH + FileInfo.Name + ".fbx";
+	FbxFilename = TargetPath + FileInfo.Name + ".fbx";
 
 	FileInfo.File.Load(Filename);
 	FileInfo.File.SaveAsFbx(FbxFilename);
 
-	g_FileInfos.push_back(FileInfo);
+	g_3dFileInfos.push_back(FileInfo);
 
 	return true;
 }
 
+static bool Parse3DFile(const string Filename)
+{
+	return Parse3DFile(Filename, OUTPUT_PATH + constants::OUTPUT_FBX_FOLDER);
+}
 
-bool ParseAll3DFiles(const string RootPath)
+static bool ParseAll3DFiles(const string RootPath, const string TargetPath)
 {
 	string FileSpec = RootPath + "*.3D";
 	WIN32_FIND_DATA FindData;
@@ -121,20 +152,24 @@ bool ParseAll3DFiles(const string RootPath)
 	do
 	{
 		string Filename = RootPath + FindData.cFileName;
-		Parse3DFile(Filename);
+		Parse3DFile(Filename, TargetPath);
 		++FileCount;
 	}
 	while (FindNextFile(hFind, &FindData));
 	
 	FindClose(hFind);
 
-	PrintLog("Found %d 3D files!", FileCount);
+	PrintLog("\tFound and parsed %d 3D files!", FileCount);
 
 	return true;
 }
 
+static bool ParseAll3DFiles(const string RootPath)
+{
+	return ParseAll3DFiles(RootPath, OUTPUT_PATH + constants::OUTPUT_FBX_FOLDER);
+}
 
-bool ParseAll3DCFiles(const string RootPath)
+static bool ParseAll3DCFiles(const string RootPath)
 {
 	string FileSpec = RootPath + "*.3DC";
 	WIN32_FIND_DATA FindData;
@@ -155,13 +190,72 @@ bool ParseAll3DCFiles(const string RootPath)
 
 	FindClose(hFind);
 
-	PrintLog("Found %d 3DC files!", FileCount);
+	PrintLog("\tFound and parsed %d 3DC files!", FileCount);
 
 	return true;
 }
 
 
-bool ParseAllTextureFiles(const string RootPath)
+static bool ParseROBFile(const string Filename) {
+	rgrob_file_t FileInfo;
+	FILE* pFile;
+	//PrintLog("Parsing file %s...", Filename.c_str());
+
+	pFile = fopen(Filename.c_str(), "rb");
+	if (pFile == nullptr) return ReportError("Error: Failed to open file '%s' for reading!", Filename.c_str());
+
+	FileInfo.FullName = Filename;
+	FileInfo.Name = ExtractFilename(Filename);
+
+	fseek(pFile, 0, SEEK_END);
+	FileInfo.Size = ftell(pFile);
+	fseek(pFile, 0, SEEK_SET);
+
+	size_t BytesRead = fread(&FileInfo.Header, 1, CRedguardRobFile::ROB_HEADER_SIZE, pFile);
+
+	if (BytesRead != CRedguardRobFile::ROB_HEADER_SIZE)
+	{
+		ReportError("Error: Only read %u of %u bytes from header in file '%s'!", BytesRead, CRedguardRobFile::ROB_HEADER_SIZE, Filename.c_str());
+	}
+
+	fclose(pFile);
+
+	FileInfo.File.Load(Filename, OUTPUT_PATH);
+
+	ParseAll3DFiles(FileInfo.File.m_FolderPath, FileInfo.File.m_FolderPath);
+
+	g_robFileInfos.push_back(FileInfo);
+	return true;
+}
+
+static bool ParseAllROBFiles(const string RootPath)
+{
+	string FileSpec = RootPath + "*.ROB";
+	WIN32_FIND_DATA FindData;
+	HANDLE hFind;
+	int FileCount = 0;
+
+	PrintLog("\nParsing all Redguard ROB files in %s...", RootPath.c_str());
+
+	hFind = FindFirstFile(FileSpec.c_str(), &FindData);
+	if (hFind == INVALID_HANDLE_VALUE) return ReportError("Error: Failed to find ROB files in path '%s'!", FileSpec);
+
+	do
+	{
+		string Filename = RootPath + FindData.cFileName;
+		ParseROBFile(Filename);
+		++FileCount;
+	} while (FindNextFile(hFind, &FindData));
+
+	FindClose(hFind);
+
+	PrintLog("\tFound and parsed %d ROB files!", FileCount);
+
+	return true;
+}
+
+
+static bool ParseAllTextureFiles(const string RootPath)
 {
 	CRedguardColFile DefaultPalette;
 	string FileSpec = RootPath + "texbsi.*";
@@ -170,7 +264,7 @@ bool ParseAllTextureFiles(const string RootPath)
 	int FileCount = 0;
 	int ErrorCount = 0;
 
-	PrintLog("Parsing all Redguard Texture files in %s...", RootPath.c_str());
+	PrintLog("\nParsing all Redguard Texture files in % s...", RootPath.c_str());
 
 	if (!DefaultPalette.Load(RootPath + "REDGUARD.COL")) ReportError("Error: Failed to load the default palette!");
 
@@ -184,14 +278,14 @@ bool ParseAllTextureFiles(const string RootPath)
 
 		TextureFile.SetDefaultPalette(DefaultPalette);
 
-		PrintLog("Loading texture file %s...", FindData.cFileName);
+		PrintLog("\nLoading texture file %s...", FindData.cFileName);
 
 		bool Result = TextureFile.Load(Filename);
 		
 		if (Result)
 		{
 			PrintLog("\tLoaded %s with %u images!", Filename.c_str(), TextureFile.m_Filename.size());
-			Result = TextureFile.ExportImages(OUTPUT_TEXTURE_PATH);
+			Result = TextureFile.ExportImages(OUTPUT_PATH + constants::OUTPUT_TEXTURE_FOLDER);
 			if (!Result) PrintLog("\tError: Failed to export image(s) to PNG!");
 		}
 		else
@@ -206,18 +300,298 @@ bool ParseAllTextureFiles(const string RootPath)
 
 	FindClose(hFind);
 
-	PrintLog("Found %d Texture files with %d errors!", FileCount, ErrorCount);
+	PrintLog("\tFound and parsed %d Texture files with %d errors!", FileCount, ErrorCount);
 
 	return true;
 }
 
 
-void ShowFileInfos()
+static bool ParseWLDFile(string Filename, const string TargetPath)
+{
+	FILE* pFile;
+	size_t BytesRead;
+	std::vector<byte> Header(REDGUARD_WORLD_HEADERSIZE, 0);
+	std::vector<byte> Footer(REDGUARD_WORLD_FOOTERSIZE, 0);
+	simpleimagedata_t FileData;
+
+	string folderName = ExtractFilename(Filename);
+	std::replace(folderName.begin(), folderName.end(), '.', '_');
+
+	if (!(CreateDirectory((TargetPath + folderName).c_str(), NULL) || ERROR_ALREADY_EXISTS == GetLastError())) return ReportError("Could not create directory %s", folderName);;;
+	string folderPath = TargetPath + folderName + "\\";
+
+	std::vector < std::vector< imagedatas_t > > ImageDatas;
+
+	ImageDatas.resize(4);
+
+	for (auto&& i : ImageDatas)
+	{
+		i.resize(4);
+	}
+
+	pFile = fopen(Filename.c_str(), "rb");
+
+	if (pFile == nullptr)
+	{
+		PrintLog("Error: Failed to open file '%s'!\n", Filename.c_str());
+		return false;
+	}
+
+	if (fseek(pFile, 0, SEEK_END) != 0)
+	{
+		fclose(pFile);
+		PrintLog("Error: Failed to find end of file '%s'!\n", Filename.c_str());
+		return false;
+	}
+
+	fpos_t fileSize = ftell(pFile);
+
+	if (fileSize == -1)
+	{
+		fclose(pFile);
+		PrintLog("Error: Failed to get size of file '%s'!\n", Filename.c_str());
+		return false;
+	}
+
+	fseek(pFile, 0, SEEK_SET);
+
+	BytesRead = fread(Header.data(), 1, REDGUARD_WORLD_HEADERSIZE, pFile);
+
+	if (BytesRead != REDGUARD_WORLD_HEADERSIZE)
+	{
+		fclose(pFile);
+		PrintLog("Error: Only read %d of %d bytes from world file header '%s'!\n", BytesRead, REDGUARD_WORLD_HEADERSIZE, Filename.c_str());
+		return false;
+	}
+
+	int dataSize = REDGUARD_WORLD_EXPORTWIDTH * REDGUARD_WORLD_EXPORTHEIGHT;
+	FileData.resize(dataSize, 0);
+
+	for (int sectionIndex = 0; sectionIndex < 4; ++sectionIndex)
+	{
+		byte imageHeader[REDGUARD_WORLD_IMAGEHEADERSIZE];
+
+		BytesRead = fread(imageHeader, 1, REDGUARD_WORLD_IMAGEHEADERSIZE, pFile);
+
+		if (BytesRead != REDGUARD_WORLD_IMAGEHEADERSIZE)
+		{
+			fclose(pFile);
+			PrintLog("Error: Only read %d of %d bytes from section header data '%s'!\n", BytesRead, REDGUARD_WORLD_IMAGEHEADERSIZE, Filename.c_str());
+			return false;
+		}
+
+		for (int imageIndex = 0; imageIndex < 4; ++imageIndex)
+		{
+			simpleimagedata_t HeightMapImage;
+			simpleimagedata_t HeightMapFlag;
+
+			HeightMapImage.resize(dataSize, 0);
+			HeightMapFlag.resize(dataSize, 0);
+
+			BytesRead = fread(FileData.data(), 1, dataSize, pFile);
+
+			if (BytesRead != dataSize)
+			{
+				fclose(pFile);
+				PrintLog("Error: Only read %d of %d bytes from image section %d:%d world file data '%s'!\n", BytesRead, dataSize, sectionIndex, imageIndex, Filename.c_str());
+				return false;
+			}
+
+			if (imageIndex == 0)
+			{
+				for (int j = 0; j < dataSize; ++j)
+				{
+					HeightMapImage[j] = (FileData[j] & 0x7F) * 2;
+					HeightMapFlag[j] = FileData[j] & 0x80;
+				}
+			}
+			else if (imageIndex == 2)
+			{
+				for (int j = 0; j < dataSize; ++j)
+				{
+					HeightMapImage[j] = FileData[j] & 0x3F;
+					HeightMapFlag[j] = FileData[j] & 0xC0;
+				}
+			}
+			else
+			{
+				HeightMapImage = FileData;
+			}
+
+			ImageDatas[sectionIndex][imageIndex].push_back(HeightMapImage);
+			ImageDatas[sectionIndex][imageIndex].push_back(HeightMapFlag);
+		}
+	}
+
+	char OutputFile[1000];
+	ILuint imageID = ilGenImage();
+	ilBindImage(imageID);
+
+	ilTexImage(REDGUARD_WORLD_EXPORTWIDTH * 2, REDGUARD_WORLD_EXPORTHEIGHT * 2, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, nullptr);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][0][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][0][0].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][0][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][0][0].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-HeightMap.png", folderPath.c_str(), ExtractFilename(Filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][0][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][0][1].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][0][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][0][1].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-HeightFlag.png", folderPath.c_str(), ExtractFilename(Filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][2][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][2][0].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][2][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][2][0].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-Texture.png", folderPath.c_str(), ExtractFilename(Filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][2][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][2][1].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][2][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][2][1].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-TextureRotation.png", folderPath.c_str(), ExtractFilename(Filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	snprintf(OutputFile, 900, "%s%s-Texture.csv", folderPath.c_str(), ExtractFilename(Filename).c_str());
+	FILE* pCsvFile = fopen(OutputFile, "wt");
+	fprintf(pCsvFile, "x, y, index, rotation\n");
+
+	byte* pTextureImageData = ImageDatas[0][2][0].data();
+	byte* pTextureRotationData = ImageDatas[0][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x, y, index, rot);
+		}
+	}
+
+	pTextureImageData = ImageDatas[1][2][0].data();
+	pTextureRotationData = ImageDatas[1][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x + REDGUARD_WORLD_EXPORTWIDTH, y, index, rot);
+		}
+	}
+
+	pTextureImageData = ImageDatas[2][2][0].data();
+	pTextureRotationData = ImageDatas[2][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x, y + REDGUARD_WORLD_EXPORTHEIGHT, index, rot);
+		}
+	}
+
+	pTextureImageData = ImageDatas[3][2][0].data();
+	pTextureRotationData = ImageDatas[3][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x + REDGUARD_WORLD_EXPORTWIDTH, y + REDGUARD_WORLD_EXPORTHEIGHT, index, rot);
+		}
+	}
+
+	fclose(pCsvFile);
+
+	ilDeleteImage(imageID);
+
+	if (REDGUARD_WORLD_FOOTERSIZE > 0)
+	{
+		BytesRead = fread(Footer.data(), 1, REDGUARD_WORLD_FOOTERSIZE, pFile);
+
+		if (BytesRead != REDGUARD_WORLD_FOOTERSIZE)
+		{
+			fclose(pFile);
+			PrintLog("Error: Only read %d of %d bytes from world file data footer '%s'!\n", BytesRead, REDGUARD_WORLD_FOOTERSIZE, Filename.c_str());
+			return false;
+		}
+	}
+
+	fpos_t endPos = ftell(pFile);
+	if (endPos != fileSize)	PrintLog("Warning: Didn't read entire world file data: %d / %d (%d bytes misread)!\n", (int)endPos, (int)fileSize, (int)endPos - (int)fileSize);
+
+	fclose(pFile);
+
+
+	return true;
+}
+
+static bool ParseWLDFile(string Filename) {
+	return ParseWLDFile(Filename, OUTPUT_PATH + constants::OUTPUT_WLD_FOLDER);
+}
+
+static bool ParseAllWLDFiles(const string RootPath, const string TargetPath) {
+	string FileSpec = RootPath + "*.WLD";
+	WIN32_FIND_DATA FindData;
+	HANDLE hFind;
+	int FileCount = 0;
+
+	PrintLog("\nParsing all Redguard WLD files in %s...", RootPath.c_str());
+
+	hFind = FindFirstFile(FileSpec.c_str(), &FindData);
+	if (hFind == INVALID_HANDLE_VALUE) return ReportError("Error: Failed to find WLD files in path '%s'!", FileSpec);
+
+	do
+	{
+		string Filename = RootPath + FindData.cFileName;
+		ParseWLDFile(Filename, TargetPath);
+		++FileCount;
+	} while (FindNextFile(hFind, &FindData));
+
+	FindClose(hFind);
+
+	PrintLog("\tFound and parsed %d WLD files!", FileCount);
+
+	return true;
+}
+
+static bool ParseAllWLDFiles(const string RootPath) {
+	return ParseAllWLDFiles(RootPath, OUTPUT_PATH + constants::OUTPUT_WLD_FOLDER);
+}
+
+
+
+
+void Show3dFileInfos()
 {
 
-	PrintLog("Showing information for %u 3D files:", g_FileInfos.size());
+	PrintLog("Showing information for %u 3D files:", g_3dFileInfos.size());
 
-	for (const auto& Info : g_FileInfos)
+	for (const auto& Info : g_3dFileInfos)
 	{
 		PrintLog("\t%s: %d bytes", Info.Name.c_str(), Info.Size);
 
@@ -260,7 +634,7 @@ void ShowFileInfos()
 
 	PrintLog("Name, Size, Version, NumVert, NumFace, Radius, NumFrames, Offset3, Unk2, Offset4, Unk3, Unk4, Offset5, Offset6, Offset1, Offset2, Unk5, Offset0, 0Size, 1Size, 2Size, 3Size, 4Size, 5Size, 6Size");
 
-	for (const auto& Info : g_FileInfos)
+	for (const auto& Info : g_3dFileInfos)
 	{
 		int rec1size = 0;
 		int rec2size = 0;
@@ -293,17 +667,47 @@ void ShowFileInfos()
 	CRedguard3dFile::ReportInfo();
 }
 
+void ShowRobFileInfos()
+{
+
+	PrintLog("Showing information for %u ROB files:", g_robFileInfos.size());
+
+	for (const auto& Info : g_robFileInfos)
+	{
+		PrintLog("\t%s: %d bytes\n", Info.Name.c_str(), Info.Size);
+		PrintLog("\tHeader:\n\t%d segments\n", Info.Header.NumSegments);
+
+		for (unsigned __int32 i = 0; i < Info.Header.NumSegments; ++i)
+		{
+			rg_robfile_segmentheader_t header = Info.File.m_SegmentHeaders[i];
+			PrintLog("\t\tSegment %s\n\t\t\tOffset: %d, Size: %d\n\t\t\tType: %d\n\t\t\tExpect 0: %d, %d, %d, %d\n\t\t\tUnknown: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n", 
+				reinterpret_cast<const char*>(&header.SegmentID1),
+				header.OffsetNextSegment, header.Size,
+				header.UnknownType,
+				header.Unknown3, header.Unknown4, header.Unknown5, header.Unknown6,
+				header.Unknown1, header.Unknown2, header.UnknownInt1, header.UnknownInt2, header.UnknownInt3, header.UnknownInt4, header.UnknownInt5, header.UnknownInt6, header.UnknownInt7, header.UnknownInt8, header.UnknownInt9);
+
+		}
+	}
+
+	CRedguardRobFile::ReportInfo();
+}
+
+void ShowFileInfos()
+{
+	ShowRobFileInfos();
+	Show3dFileInfos();
+}
 
 void ShowFileVertexInfos()
 {
 	PrintLog("Name, MinX, MinY, MinZ, MaxX, MaxY, MaxZ");
 
-	for (const auto& Info : g_FileInfos)
+	for (const auto& Info : g_3dFileInfos)
 	{
 		PrintLog("%12.12s, %d, %d, %d, %d, %d, %d", Info.Name.c_str(), Info.File.m_MinCoor.x, Info.File.m_MinCoor.y, Info.File.m_MinCoor.z, Info.File.m_MaxCoor.x, Info.File.m_MaxCoor.y, Info.File.m_MaxCoor.z);
 	}
 }
-
 
 void ShowFileModelInfos()
 {
@@ -311,7 +715,7 @@ void ShowFileModelInfos()
 
 	PrintLog("Name, Face, Model1, Model2, Model3, Model4, Model5");
 
-	for (const auto& Info : g_FileInfos)
+	for (const auto& Info : g_3dFileInfos)
 	{
 		dword i = 0;
 
@@ -369,11 +773,12 @@ void ShowFileModelInfos()
 
 }
 
-static const char* gDiffuseElementName = "DiffuseUV";
-static const char* gAmbientElementName = "AmbientUV";
-static const char* gEmissiveElementName = "EmissiveUV";
 
 
+
+
+
+/* EXAMPLE SECTION */ 
 // Create texture for cube.
 void CreateTexture(FbxScene* pScene, FbxMesh* pMesh)
 {
@@ -482,14 +887,12 @@ void CreateTexture(FbxScene* pScene, FbxMesh* pMesh)
 		lMaterial->Emissive.ConnectSrcObject(lTexture);
 }
 
-
 void SetCubeDefaultPosition(FbxNode* pCube)
 {
 	pCube->LclTranslation.Set(FbxVector4(-75.0, -50.0, 0.0));
 	pCube->LclRotation.Set(FbxVector4(0.0, 0.0, 0.0));
 	pCube->LclScaling.Set(FbxVector4(1.0, 1.0, 1.0));
 }
-
 
 // Create a cube with a texture. 
 FbxNode* CreateCubeWithTexture(FbxScene* pScene, const char* pName)
@@ -723,7 +1126,6 @@ FbxNode* CreateCubeWithTexture(FbxScene* pScene, const char* pName)
 	return lNode;
 }
 
-
 bool CreateScene(FbxScene* pScene, const char* pSampleFileName)
 {
 	FbxNode* lCube = CreateCubeWithTexture(pScene, "Cube");
@@ -738,12 +1140,6 @@ bool CreateScene(FbxScene* pScene, const char* pSampleFileName)
 
 	return true;
 }
-
-
-#ifdef IOS_REF
-	#undef  IOS_REF
-	#define IOS_REF (*(pManager->GetIOSettings()))
-#endif
 
 bool SaveScene1(FbxManager* pManager, FbxDocument* pScene, const char* pFilename, int pFileFormat = -1, bool pEmbedMedia = false)
 {
@@ -807,304 +1203,49 @@ bool SaveScene1(FbxManager* pManager, FbxDocument* pScene, const char* pFilename
 }
 
 
-const size_t REDGUARD_WORLD_HEADERSIZE = 1184;
-const size_t REDGUARD_WORLD_IMAGEHEADERSIZE = 22;
-const size_t REDGUARD_WORLD_FOOTERSIZE = 16;
-const size_t REDGUARD_WORLD_EXPORTWIDTH = 128;
-const size_t REDGUARD_WORLD_EXPORTHEIGHT = 128;
-
-
-typedef std::vector<byte> simpleimagedata_t;
-typedef std::vector< simpleimagedata_t > imagedatas_t;
-
-
-bool TestExportWorldFile(std::string filename)
-{
-	FILE* pFile;
-	size_t BytesRead;
-	std::vector<byte> Header(REDGUARD_WORLD_HEADERSIZE, 0);
-	std::vector<byte> Footer(REDGUARD_WORLD_FOOTERSIZE, 0);
-	simpleimagedata_t FileData;
-
-	std::vector < std::vector< imagedatas_t > > ImageDatas;
-
-	ImageDatas.resize(4);
-
-	for (auto&& i : ImageDatas)
-	{
-		i.resize(4);
-	}
-
-	pFile = fopen(filename.c_str(), "rb");
-
-	if (pFile == nullptr)
-	{
-		PrintLog("Error: Failed to open file '%s'!\n", filename.c_str());
-		return false;
-	}
-
-	if (fseek(pFile, 0, SEEK_END) != 0)
-	{
-		fclose(pFile);
-		PrintLog("Error: Failed to find end of file '%s'!\n", filename.c_str());
-		return false;
-	}
-
-	fpos_t fileSize = ftell(pFile);
-
-	if (fileSize == -1)
-	{
-		fclose(pFile);
-		PrintLog("Error: Failed to get size of file '%s'!\n", filename.c_str());
-		return false;
-	}
-
-	fseek(pFile, 0, SEEK_SET);
-		
-	BytesRead = fread(Header.data(), 1, REDGUARD_WORLD_HEADERSIZE, pFile);
-
-	if (BytesRead != REDGUARD_WORLD_HEADERSIZE)
-	{
-		fclose(pFile);
-		PrintLog("Error: Only read %d of %d bytes from world file header '%s'!\n", BytesRead, REDGUARD_WORLD_HEADERSIZE, filename.c_str());
-		return false;
-	}
-
-	int dataSize = REDGUARD_WORLD_EXPORTWIDTH * REDGUARD_WORLD_EXPORTHEIGHT;
-	FileData.resize(dataSize, 0);
-
-	for (int sectionIndex = 0; sectionIndex < 4; ++sectionIndex)
-	{
-		byte imageHeader[REDGUARD_WORLD_IMAGEHEADERSIZE];
-
-		BytesRead = fread(imageHeader, 1, REDGUARD_WORLD_IMAGEHEADERSIZE, pFile);
-
-		if (BytesRead != REDGUARD_WORLD_IMAGEHEADERSIZE)
-		{
-			fclose(pFile);
-			PrintLog("Error: Only read %d of %d bytes from section header data '%s'!\n", BytesRead, REDGUARD_WORLD_IMAGEHEADERSIZE, filename.c_str());
-			return false;
-		}
-
-		for (int imageIndex = 0; imageIndex < 4; ++imageIndex)
-		{
-			simpleimagedata_t HeightMapImage;
-			simpleimagedata_t HeightMapFlag;
-
-			HeightMapImage.resize(dataSize, 0);
-			HeightMapFlag.resize(dataSize, 0);
-
-			BytesRead = fread(FileData.data(), 1, dataSize, pFile);
-
-			if (BytesRead != dataSize)
-			{
-				fclose(pFile);
-				PrintLog("Error: Only read %d of %d bytes from image section %d:%d world file data '%s'!\n", BytesRead, dataSize, sectionIndex, imageIndex, filename.c_str());
-				return false;
-			}
-
-			if (imageIndex == 0)
-			{
-				for (int j = 0; j < dataSize; ++j)
-				{
-					HeightMapImage[j] = (FileData[j] & 0x7F) * 2;
-					HeightMapFlag[j] = FileData[j] & 0x80;
-				}
-			}
-			else if (imageIndex == 2)
-			{
-				for (int j = 0; j < dataSize; ++j)
-				{
-					HeightMapImage[j] = FileData[j] & 0x3F;
-					HeightMapFlag[j] = FileData[j] & 0xC0;
-				}
-			}
-			else
-			{
-				HeightMapImage = FileData;
-			}
-
-			//std::string OutputFile = OUTPUT_TEXTURE_PATH + ExtractFilename(filename) + ".png";
-			//char OutputFile[1000];
-			//snprintf(OutputFile, 900, "%s%s-%d-%d.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str(), sectionIndex, imageIndex);
-
-			//ilTexImage(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, FileData.data());
-			//iluFlipImage();
-			//ilSave(IL_PNG, OutputFile);
-
-			ImageDatas[sectionIndex][imageIndex].push_back(HeightMapImage);
-			ImageDatas[sectionIndex][imageIndex].push_back(HeightMapFlag);
-		}
-	}
-
-	char OutputFile[1000];
-	ILuint imageID = ilGenImage();
-	ilBindImage(imageID);
-
-	ilTexImage(REDGUARD_WORLD_EXPORTWIDTH*2, REDGUARD_WORLD_EXPORTHEIGHT*2, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, nullptr);
-	
-	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][0][0].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][0][0].data());
-	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][0][0].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][0][0].data());
-	iluFlipImage();
-	ilConvertImage(IL_RGB, IL_INT);
-	snprintf(OutputFile, 900, "%s%s-HeightMap.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
-	ilSave(IL_PNG, OutputFile);
-
-	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][0][1].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][0][1].data());
-	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][0][1].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][0][1].data());
-	iluFlipImage();
-	ilConvertImage(IL_RGB, IL_INT);
-	snprintf(OutputFile, 900, "%s%s-HeightFlag.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
-	ilSave(IL_PNG, OutputFile);
-
-	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][2][0].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][2][0].data());
-	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][2][0].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][2][0].data());
-	iluFlipImage();
-	ilConvertImage(IL_RGB, IL_INT);
-	snprintf(OutputFile, 900, "%s%s-Texture.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
-	ilSave(IL_PNG, OutputFile);
-
-	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][2][1].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][2][1].data());
-	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][2][1].data());
-	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][2][1].data());
-	iluFlipImage();
-	ilConvertImage(IL_RGB, IL_INT);
-	snprintf(OutputFile, 900, "%s%s-TextureRotation.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
-	ilSave(IL_PNG, OutputFile);
-
-	snprintf(OutputFile, 900, "%s%s-Texture.csv", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
-	FILE* pCsvFile = fopen(OutputFile, "wt");
-	fprintf(pCsvFile, "x, y, index, rotation\n");
-
-	byte* pTextureImageData = ImageDatas[0][2][0].data();
-	byte* pTextureRotationData = ImageDatas[0][2][1].data();
-
-	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
-	{
-		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
-		{
-			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
-			int index = pTextureImageData[i];
-			int rot = pTextureRotationData[i];
-			fprintf(pCsvFile, "%d, %d, %d, %d\n", x, y, index, rot);
-		}
-	}
-
-	pTextureImageData = ImageDatas[1][2][0].data();
-	pTextureRotationData = ImageDatas[1][2][1].data();
-
-	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
-	{
-		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
-		{
-			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
-			int index = pTextureImageData[i];
-			int rot = pTextureRotationData[i];
-			fprintf(pCsvFile, "%d, %d, %d, %d\n", x + REDGUARD_WORLD_EXPORTWIDTH, y, index, rot);
-		}
-	}
-
-	pTextureImageData = ImageDatas[2][2][0].data();
-	pTextureRotationData = ImageDatas[2][2][1].data();
-
-	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
-	{
-		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
-		{
-			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
-			int index = pTextureImageData[i];
-			int rot = pTextureRotationData[i];
-			fprintf(pCsvFile, "%d, %d, %d, %d\n", x, y + REDGUARD_WORLD_EXPORTHEIGHT, index, rot);
-		}
-	}
-
-	pTextureImageData = ImageDatas[3][2][0].data();
-	pTextureRotationData = ImageDatas[3][2][1].data();
-
-	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
-	{
-		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
-		{
-			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
-			int index = pTextureImageData[i];
-			int rot = pTextureRotationData[i];
-			fprintf(pCsvFile, "%d, %d, %d, %d\n", x + REDGUARD_WORLD_EXPORTWIDTH, y + REDGUARD_WORLD_EXPORTHEIGHT, index, rot);
-		}
-	}
-
-	fclose(pCsvFile);
-
-	ilDeleteImage(imageID);
-
-	if (REDGUARD_WORLD_FOOTERSIZE > 0)
-	{
-		BytesRead = fread(Footer.data(), 1, REDGUARD_WORLD_FOOTERSIZE, pFile);
-
-		if (BytesRead != REDGUARD_WORLD_FOOTERSIZE)
-		{
-			fclose(pFile);
-			PrintLog("Error: Only read %d of %d bytes from world file data footer '%s'!\n", BytesRead, REDGUARD_WORLD_FOOTERSIZE, filename.c_str());
-			return false;
-		}
-	}
-
-	fpos_t endPos = ftell(pFile);
-	if (endPos != fileSize)	PrintLog("Warning: Didn't read entire world file data: %d / %d (%d bytes misread)!\n", (int)endPos, (int)fileSize, (int)endPos - (int)fileSize);
-
-	fclose(pFile);
-
-	
-	return true;
-}
 
 
 
-int main()
+
+/* MAIN */
+int main(int argc, char* argv[])
 {
 	SetLogLineHeaderOutput(false);
 	DuplicateLogToStdOut(true);
 	OpenLog("3dfiletest.log");
 
-	InitializeImageLib();
-	ilEnable(IL_ORIGIN_SET);
-	ilOriginFunc(IL_ORIGIN_LOWER_LEFT);
 
-	TestExportWorldFile(REDGUARD_WORLD_FILE1);
-	TestExportWorldFile(REDGUARD_WORLD_FILE2);
-	TestExportWorldFile(REDGUARD_WORLD_FILE3);
-	TestExportWorldFile(REDGUARD_WORLD_FILE4);
-	
-	return 0;
+	if (argc >= 2)
+	{
+		OUTPUT_PATH = string(argv[1]) + "\\";
+	}
+	else 
+	{
+		PrintLog("Missing Output Path"); 
+		return 1;
+	}
+
+
+	if (argc >= 3) 
+	{
+		REDGUARD_FILE_PATH = string(argv[2]) + "\\";
+	}
+	else
+	{
+		PrintLog("Missing path to redguard files, assuming standard GOG install location");
+	}
 
 	InitializeImageLib();
 	InitializeFbxSdkObjects();
 
-	// Create the scene.
-	//FbxScene* lScene = FbxScene::Create(g_pSdkManager, "c:\\Temp\\fbx3\\cube.fbx");
-	//bool lResult = CreateScene(lScene, "c:\\Temp\\fbx3\\cube.fbx");
-	//lResult = ::SaveScene1(g_pSdkManager, lScene, "c:\\Temp\\fbx3\\cube.fbx");
+	ilEnable(IL_ORIGIN_SET);
+	ilOriginFunc(IL_ORIGIN_LOWER_LEFT);
 
-	//PrintLog("Image Header Size = %d", sizeof(redguard_image_header_t));
-	//PrintLog("Header Size = %d", sizeof(rg3d_header_t));
-	//PrintLog("Header Size = %d", sizeof(Redguard3dFile_Header_t));
-    
-	Parse3DFile(REDGUARD_FILE_PATH + "MKCRATE.3D");
-	Parse3DFile(REDGUARD_FILE_PATH + "MKCRATE1.3D");
-	Parse3DFile(REDGUARD_FILE_PATH + "XWANTED.3D");
-	//ParseAll3DCFiles(REDGUARD_FILE_PATH);
-	//ParseAll3DFiles(REDGUARD_FILE_PATH);
-	//ParseAllTextureFiles(REDGUARD_FILE_PATH);
-
-	//ShowFileInfos();
-	ShowFileVertexInfos();
-	//ShowFileModelInfos();
+	ParseAll3DCFiles(REDGUARD_FILE_PATH + constants::FXART_FOLDER);
+	ParseAll3DFiles(REDGUARD_FILE_PATH + constants::FXART_FOLDER);
+	ParseAllROBFiles(REDGUARD_FILE_PATH + constants::FXART_FOLDER);
+	ParseAllTextureFiles(REDGUARD_FILE_PATH + constants::FXART_FOLDER);
+	ParseAllWLDFiles(REDGUARD_FILE_PATH + constants::MAPS_FOLDER);
 
 	DestroyFbxSdkObjects();
 

@@ -235,8 +235,6 @@ bool CRedguardTextureImage::ReadSubrecords(FILE* pFile)
 		BytesRead = fread(RecordName, 1, 4, pFile);
 		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of RecordName data from texture image data (ending at 0x%08lX)!", ftell(pFile));
 
-		ReportError("\t%08lX: Found %4.4s image section.", Offset, RecordName);
-
 		BytesRead = fread(&RecordSize_BigEndian, 1, 4, pFile);
 		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of RecordSize data from texture image data (ending at 0x%08lX)!", ftell(pFile));
 
@@ -382,8 +380,6 @@ bool CRedguardTexBsiFile::ReadImage(FILE* pFile)
 	BytesRead = fread(&ImageSize, 1, 4, pFile);
 	if (feof(pFile)) return true;
 	if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of ImageSize data from texture image data (ending at 0x%08lX)!", ftell(pFile));
-
-	ReportError("\t%08lX: Starting BSI image read.", CurOffset);
 
 	m_Images.push_back({});
 	m_Images[m_Images.size() - 1].SetDefaultPalette(m_DefaultPalette);

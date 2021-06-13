@@ -1,6 +1,10 @@
 #include "RedguardFbx.h"
 #include <fbxsdk.h>
 
+#ifdef IOS_REF
+	#undef  IOS_REF
+	#define IOS_REF (*(pManager->GetIOSettings()))
+#endif
 
 
 namespace uesp
@@ -9,12 +13,6 @@ namespace uesp
 
 	
 	FbxManager* g_pSdkManager = nullptr;
-	
-
-#ifdef IOS_REF
-	#undef  IOS_REF
-	#define IOS_REF (*(pManager->GetIOSettings()))
-#endif
 
 
 		/* Copied from FBX SDK samples */
@@ -145,6 +143,7 @@ namespace uesp
 	}
 	
 
+	//TODO: only decide on format _once_
 		/* Copied from FBX SDK samples */
 	bool SaveScene(FbxManager* pManager, FbxDocument* pScene, const char* pFilename, int pFileFormat = -1, bool pEmbedMedia = false)
 	{
@@ -163,8 +162,9 @@ namespace uesp
 				if (pManager->GetIOPluginRegistry()->WriterIsFBX(lFormatIndex))
 				{
 					FbxString lDesc = pManager->GetIOPluginRegistry()->GetWriterFormatDescription(lFormatIndex);
-					const char *lASCII = "ascii";
-					if (lDesc.Find(lASCII) >= 0)
+
+					const char *lBinary = "FBX binary";
+					if (lDesc.Find(lBinary) >= 0)
 					{
 						pFileFormat = lFormatIndex;
 						break;
@@ -219,7 +219,7 @@ namespace uesp
 			for (auto& v : face.VertexData)
 			{
 				lControlPoints[j] = ControlPoints[v.VertexIndex];
-				UVs.push_back(FbxVector2( v.U / File.UV_TRANSFORM_FACTOR, v.V / File.UV_TRANSFORM_FACTOR));
+				UVs.push_back(FbxVector2((File.UV_TRANSFORM_FACTOR - v.U) / File.UV_TRANSFORM_FACTOR, (File.UV_TRANSFORM_FACTOR - v.V) / File.UV_TRANSFORM_FACTOR));
 
 				++j;
 			}

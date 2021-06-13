@@ -206,7 +206,7 @@ namespace uesp
 
 		for (auto& it : File.m_VertexCoordinates)
 		{
-			ControlPoints.push_back(FbxVector4(it.x / File.COOR_TRANSFORM_FACTOR, it.y / File.COOR_TRANSFORM_FACTOR, it.z / File.COOR_TRANSFORM_FACTOR));
+			ControlPoints.push_back(FbxVector4(-it.x / File.COOR_TRANSFORM_FACTOR, -it.y / File.COOR_TRANSFORM_FACTOR, it.z / File.COOR_TRANSFORM_FACTOR));
 		}
 
 		lMesh->InitControlPoints(File.m_TotalFaceVertexes);

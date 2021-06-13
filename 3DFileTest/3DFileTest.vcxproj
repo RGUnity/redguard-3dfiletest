@@ -23,34 +23,34 @@
     <ProjectGuid>{984C654D-28D1-42C6-8FA0-AA777AD6A7E2}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>My3DFileTest</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -72,21 +72,27 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\include;D:\src\uesp\Redguard\3DFileTest\3DFileTest\Common\devil\include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\include;Common\devil\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\debug;</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\include;Common\devil\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\debug;</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\include;D:\src\uesp\Redguard\3DFileTest\3DFileTest\Common\devil\include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\include;Common\devil\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\release;</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\include;Common\devil\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\release;</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
@@ -102,22 +108,26 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);</AdditionalDependencies>
+      <ForceFileOutput>Enabled</ForceFileOutput>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -136,7 +146,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -154,10 +164,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Common\Globals.hpp" />
     <ClInclude Include="Common\Redguard3dFile.h" />
     <ClInclude Include="Common\RedguardCommon.h" />
     <ClInclude Include="Common\RedguardFbx.h" />
     <ClInclude Include="Common\RedguardTexBsiFile.h" />
+    <ClInclude Include="Common\RedguardRobFile.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -174,6 +186,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Common\RedguardRobFile.cpp" />
     <ClCompile Include="Common\RedguardTexBsiFile.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -186,29 +199,53 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\debug\libfbxsdk-md.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\debug\libfbxsdk-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\debug\libfbxsdk.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\debug\libfbxsdk.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\debug\libxml2-md.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\debug\libxml2-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\debug\zlib-md.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\debug\zlib-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\release\libfbxsdk-md.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\release\libfbxsdk-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\release\libfbxsdk.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\release\libfbxsdk.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\release\libxml2-md.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\release\libxml2-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win32'">true</ExcludedFromBuild>
     </Library>
-    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1.1\lib\vs2017\x86\release\zlib-md.lib">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x86\release\zlib-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win32'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\debug\libfbxsdk-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\debug\libfbxsdk.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\debug\libxml2-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\debug\zlib-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Debug|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\release\libfbxsdk-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\release\libfbxsdk.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\release\libxml2-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win64'">true</ExcludedFromBuild>
+    </Library>
+    <Library Include="C:\Program Files\Autodesk\FBX\FBX SDK\2020.1\lib\vs2017\x64\release\zlib-md.lib">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='Release|Win64'">true</ExcludedFromBuild>
     </Library>
     <Library Include="Common\devil\lib\DevIL.lib" />
     <Library Include="Common\devil\lib\ILU.lib" />

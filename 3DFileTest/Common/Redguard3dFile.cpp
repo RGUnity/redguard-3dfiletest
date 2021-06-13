@@ -1,4 +1,3 @@
-
 #include "Redguard3dFile.h"
 #include "RedguardFbx.h"
 
@@ -31,7 +30,6 @@ CRedguard3dFile::~CRedguard3dFile()
 
 bool CRedguard3dFile::ConvertVersion()
 {
-
 	if (strncmp((const char *)&m_Header.Version, "v2.6", 4) == 0)
 	{
 		m_Version = 26;
@@ -122,10 +120,15 @@ bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 		BytesRead = fread(&FaceData.U4, 1, 4, pFile);
 		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of U4 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
+		if (FaceData.U4 != 0) return ReportError("Error: Non-Zero U4 encountered");
+
 		FaceData.VertexData.resize(FaceData.VertexCount);
 
 		g_FaceVectorSizes[FaceData.VertexCount] += 1;
 		m_TotalFaceVertexes += FaceData.VertexCount;
+
+		int16_t u = 0;
+		int16_t v = 0;
 
 		for (dword j = 0; j < FaceData.VertexCount; ++j)
 		{
@@ -134,7 +137,7 @@ bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 			BytesRead = fread(&VertexData.VertexIndex, 1, 4, pFile);
 			if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of VertexIndex data from face data section in 3D file (face %u, vertex %u, ending at offset 0x%08lX)!", i, j, ftell(pFile));
 
-					//Convert vertex offsets to indexes in older files
+			//Convert vertex offsets to indexes in older files
 			if (m_Version <= 27)
 			{
 				VertexData.VertexIndex = VertexData.VertexIndex / 12;
@@ -145,6 +148,12 @@ bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 
 			BytesRead = fread(&VertexData.V, 1, 2, pFile);
 			if (BytesRead != 2) return ReportError("Error: Failed to read 2 bytes of Vertex V data from face data section in 3D file (face %u, vertex %u, ending at offset 0x%08lX)!", i, j, ftell(pFile));
+
+			VertexData.U = VertexData.U + u;
+			VertexData.V = VertexData.V + v;
+
+			u = VertexData.U;
+			v = VertexData.V;
 		}
 	}
 

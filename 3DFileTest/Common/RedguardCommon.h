@@ -10,10 +10,10 @@
 
 namespace uesp 
 {
-
+	typedef DWORD64 qword;
 	typedef DWORD dword;
-	typedef BYTE byte;
 	typedef WORD word;
+	typedef BYTE byte;
 
 
 	struct redguard_image_color_t
